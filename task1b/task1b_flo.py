@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -16,7 +15,6 @@ from sklearn import metrics
 train_data = pd.read_csv('datasets/train.csv', delimiter=',')
 X = train_data.iloc[:,2:]
 y = train_data.iloc[:,1]
-X0 = pd.read_csv('datasets/train.csv', delimiter=',').iloc[:,2:]
 
 
 ## Check data
@@ -67,26 +65,35 @@ print(X.head())
 
 ## By hand estimations
 # Split into train and test
-#X_train, X_test, y_train, y_test = train_test_split(X, y, train_size=0.8)
-#print(X_train.head())
-#
-# Train the linear regression model
-#model = LinearRegression()
-#model = Ridge(alpha=0.5)
-#model = Lasso(alpha=0.01, fit_intercept=False)
-#model.fit(X_train, y_train)
-#
-# Print coefficients
-#print(model.coef_)
-#
-# Make predictions for the test dataset
-#y_test_prediction = model.predict(X_test)
-#print("RMSE: %.2e" %(np.sqrt(metrics.mean_squared_error(y_test, y_test_prediction))))
+X_train, X_test, y_train, y_test = train_test_split(X, y, train_size=0.8)
+# Check training features
+print(X_train.head())
+
+# Do not fit intercept as this is already taken care of by feature x21
+fit_intercept = False
+
+models = {
+    "LinearRegression": LinearRegression(fit_intercept=fit_intercept),
+    "Ridge": Ridge(alpha=0.5, max_iter=10000),
+    "Lasso": Lasso(alpha=0.01, fit_intercept=fit_intercept, max_iter=10000),
+}
+
+# Train and evaluate the performance of the model
+for model_name, model in models.items():
+    print("\nTraining and evaluating model %s" %model_name)
+    # Training
+    model.fit(X_train, y_train)
+    # Print coefficients
+    print(model.coef_)
+    # Make predictions for the test dataset
+    y_test_prediction = model.predict(X_test)
+    # Evaluate using RMSE
+    print("RMSE: %.2e" %(np.sqrt(metrics.mean_squared_error(y_test, y_test_prediction))))
 
 
 ## Optimize Lasso regression parameter with a Grid Search
 #  Re-used sample code at https://scikit-learn.org/stable/auto_examples/exercises/plot_cv_diabetes.html
-lasso = Lasso(max_iter=100000)
+lasso = Lasso(fit_intercept=fit_intercept, max_iter=10000)
 alphas = np.logspace(-4, -0.5, 30)
 
 tuned_parameters = [{'alpha': alphas}]
@@ -103,16 +110,12 @@ plt.semilogx(alphas, scores)
 
 # plot error lines showing +/- std. errors of the scores
 std_error = scores_std / np.sqrt(n_folds)
-
 plt.semilogx(alphas, scores + std_error, 'b--')
 plt.semilogx(alphas, scores - std_error, 'b--')
-
-# alpha=0.2 controls the translucency of the fill color
 plt.fill_between(alphas, scores + std_error, scores - std_error, alpha=0.2)
 
 plt.ylabel('CV score +/- std error')
 plt.xlabel('alpha')
-plt.axhline(np.max(scores), linestyle='--', color='.5')
 plt.xlim([alphas[0], alphas[-1]])
 plt.savefig("alpha_grid_search.pdf")
 
@@ -123,7 +126,7 @@ print("Best regression parameter: %.2e" %alpha_best)
 
 
 ## Train Lasso model for the best regression parameter on the whole dataset
-model = Lasso(alpha=alpha_best, fit_intercept=False)
+model = Lasso(alpha=alpha_best, fit_intercept=fit_intercept)
 model.fit(X, y)
 # Print coefficients
 print(model.coef_)
