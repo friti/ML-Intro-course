@@ -56,7 +56,7 @@ def main(df, name, is_train=True, use_slopes=False):
 
 
     ## Make list of feature names
-    feature_names = [ x for x in df.columns  if x not in ("pid", "Time") ]
+    feature_names = [ x for x in df.columns  if x not in ("pid", "Age", "Time") ]
     print("Features:")
     print(feature_names)
 
@@ -65,11 +65,19 @@ def main(df, name, is_train=True, use_slopes=False):
     print(datetime.datetime.now())
 
         
+    ages = df[["pid", "Age"]].groupby(["pid"]).mean()
     counts = df[["pid"]+feature_names].groupby(["pid"]).count().add_suffix("_n")
     avgs = df[["pid"]+feature_names].groupby(["pid"]).mean().add_suffix("_avg")
-    df_preprocessed = pd.concat([counts, avgs], axis=1)
+    mins = df[["pid"]+feature_names].groupby(["pid"]).min().add_suffix("_min")
+    maxs = df[["pid"]+feature_names].groupby(["pid"]).max().add_suffix("_max")
+    df_preprocessed = pd.concat([ages, counts, avgs, mins, maxs], axis=1)
+    for feature_name in feature_names:
+        df_preprocessed[feature_name + "_diff"] = df_preprocessed[feature_name + "_max"] - df_preprocessed[feature_name + "_min"]
+
+    feature_suffixes = [ "n", "avg", "min", "max", "diff" ]
 
     if use_slopes:
+        feature_suffixes = feature_suffixes + ["slope"]
         df_preprocessed["time_list"] = df.groupby(["pid"]).Time.apply(list)
         for feature_name in feature_names:
             if feature_name == "Age":
@@ -93,20 +101,14 @@ def main(df, name, is_train=True, use_slopes=False):
     if is_train:
         imputation = {}
         for feature_name in feature_names:
-            avgs = df_preprocessed[feature_name + "_avg"].replace(np.nan, 0)
-            avg_avg = np.average(avgs, weights=df_preprocessed[feature_name + "_n"])
-            print(feature_name + "_avg")
-            print("Avg avg over not NaN  : %.3f" %(avg_avg))
-            imputation[feature_name + "_avg"] = avg_avg
-            df_preprocessed[feature_name + "_avg"].replace(np.nan, avg_avg, inplace=True)
-
-            if use_slopes:
-                slopes = df_preprocessed[feature_name + "_slope"].replace(np.nan, 0)
-                slope_avg = np.average(slopes, weights=df_preprocessed[feature_name + "_n"])
-                print(feature_name + "_slope")
-                print("Avg slope over not NaN: %.3f" %(slope_avg))
-                imputation[feature_name + "_slope"] = slope_avg
-                df_preprocessed[feature_name + "_slope"].replace(np.nan, slope_avg, inplace=True)
+            for suffix in feature_suffixes:
+                if suffix == "n": continue   # No imputation for number of measurements (no NaNs)
+                feature_name_full = feature_name + "_" + suffix
+                feature = df_preprocessed[feature_name_full].replace(np.nan, 0)
+                feature_avg = np.average(feature, weights=df_preprocessed[feature_name + "_n"])
+                print("%s avg over not NaN  : %.3f" %(feature_name_full, feature_avg))
+                imputation[feature_name_full] = feature_avg
+                df_preprocessed[feature_name_full].replace(np.nan, feature_avg, inplace=True)
 
         with open('imputation.json', 'w') as f:
            json.dump(imputation, f)
@@ -116,29 +118,24 @@ def main(df, name, is_train=True, use_slopes=False):
             imputation = json.load(f)
 
         for feature_name in feature_names:
-            avg_avg = imputation[feature_name + "_avg"]
-            df_preprocessed[feature_name + "_avg"].replace(np.nan, avg_avg, inplace=True)
-
-            if use_slopes:
-                slope_avg = imputation[feature_name + "_slope"]
-                df_preprocessed[feature_name + "_slope"].replace(np.nan, slope_avg, inplace=True)
+            for suffix in feature_suffixes:
+                if suffix == "n": continue   # No imputation for number of measurements (no NaNs)
+                feature_name_full = feature_name + "_" + suffix
+                feature_avg = imputation[feature_name_full]
+                df_preprocessed[feature_name_full].replace(np.nan, feature_avg, inplace=True)
 
 
     ## Normalize features
     if is_train:
         normalisation = {}
         for feature_name in feature_names:
-            # Std scaling
-            df_preprocessed[feature_name + "_avg"], avg1, std1 = std_scaler(df_preprocessed[feature_name + "_avg"])
-            print(feature_name + "_avg")
-            print("mean: %.3f   std: %.3f" %(avg1, std1))
-            normalisation[feature_name + "_avg"] = {"mean": avg1, "std": std1}
-
-            if use_slopes:
-                df_preprocessed[feature_name + "_slope"], avg2, std2 = std_scaler(df_preprocessed[feature_name + "_slope"])
-                print(feature_name + "_slope")
-                print("mean: %.3f   std: %.3f" %(avg2, std2))
-                normalisation[feature_name + "_slope"] = {"mean": avg2, "std": std2}
+            for suffix in feature_suffixes:
+                if suffix == "n": continue   # No scaling for number of measurements
+                feature_name_full = feature_name + "_" + suffix
+                # Std scaling
+                df_preprocessed[feature_name_full], avg, std = std_scaler(df_preprocessed[feature_name_full])
+                print("%s mean: %.3f   std: %.3f" %(feature_name_full, avg, std))
+                normalisation[feature_name_full] = {"mean": avg, "std": std}
 
         with open('normalisation.json', 'w') as f:
            json.dump(normalisation, f)
@@ -147,12 +144,10 @@ def main(df, name, is_train=True, use_slopes=False):
         with open('normalisation.json') as f:
             normalisation = json.load(f)
         for feature_name in feature_names:
-            var = feature_name + "_avg"
-            df_preprocessed[var] = scale(df_preprocessed[var], normalisation[var]["mean"], normalisation[var]["std"])
-            if use_slopes:
-                var = feature_name + "_slope"
-                df_preprocessed[var] = scale(df_preprocessed[var], normalisation[var]["mean"], normalisation[var]["std"])
-            
+            for suffix in feature_suffixes:
+                if suffix == "n": continue   # No scaling for number of measurements
+                feature_name_full = feature_name + "_" + suffix
+                df_preprocessed[feature_name_full] = scale(df_preprocessed[feature_name_full], normalisation[feature_name_full]["mean"], normalisation[feature_name_full]["std"])
 
     print(df_preprocessed.head())
     print(len(df_preprocessed))
@@ -168,8 +163,8 @@ def main(df, name, is_train=True, use_slopes=False):
 train_features = pd.read_csv('../dataset/train_features.csv', delimiter=',')
 test_features = pd.read_csv('../dataset/test_features.csv' , delimiter=',')
 
-#main(train_features, "preprocessed_files/train_features_N_AVG", is_train=True)
-#main(test_features, "preprocessed_files/test_features_N_AVG", is_train=False)
+#main(train_features, "preprocessed_files/train_features_N_AVG_MIN_MAX_DIFF", is_train=True)
+#main(test_features, "preprocessed_files/test_features_N_AVG_MIN_MAX_DIFF", is_train=False)
 
-main(train_features, "preprocessed_files/train_features_N_AVG_S", is_train=True, do_slopes=True)
-main(test_features, "preprocessed_files/test_features_N_AVG_S", is_train=False, do_slopes=True)
+main(train_features, "preprocessed_files/train_features_N_AVG_MIN_MAX_DIFF_S", is_train=True, use_slopes=True)
+main(test_features, "preprocessed_files/test_features_N_AVG_MIN_MAX_DIFF_S", is_train=False, use_slopes=True)
