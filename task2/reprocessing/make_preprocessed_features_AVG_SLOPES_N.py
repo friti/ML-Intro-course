@@ -165,9 +165,11 @@ def main(df, name, is_train=True, use_slopes=False):
 
 
 ## Read training data, labels, test data
-train_features = pd.read_csv('dataset/train_features.csv', delimiter=',')
-test_features = pd.read_csv('dataset/test_features.csv' , delimiter=',')
+train_features = pd.read_csv('../dataset/train_features.csv', delimiter=',')
+test_features = pd.read_csv('../dataset/test_features.csv' , delimiter=',')
 
+main(train_features, "preprocessed_files/train_features_N_AVG", is_train=True)
+main(test_features, "preprocessed_files/test_features_N_AVG", is_train=False)
 
-main(train_features, "train_features", is_train=True)
-main(test_features, "test_features", is_train=False)
+#main(train_features, "train_features", is_train=True, do_slopes=True)
+#main(test_features, "test_features", is_train=False, do_slopes=True)
