@@ -144,7 +144,7 @@ for lab in label_features:
     print("Fit Start time")
     print(datetime.datetime.now())
 
-    classifier = svm.SVC(probability = True)
+    classifier = svm.SVC(probability = True, class_weight="balanced")
     classifier.fit(X_train,y_train)
     print("Fit End  time")
     print(datetime.datetime.now())
