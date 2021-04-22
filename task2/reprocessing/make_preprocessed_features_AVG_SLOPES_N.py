@@ -15,8 +15,8 @@ def make_linear_fit(x, y):
         return np.polyfit(x, y, 1)[0]
 
 
-def std_scaler(array):
-    mean = np.mean(array)
+def std_scaler(array, array_n):
+    mean = np.average(array.dropna(), weights=array_n.where(array.notna()).dropna())
     std = np.std(array, ddof=1)
     if std != 0:
         return (array-mean)/std, mean, std
@@ -66,7 +66,7 @@ def main(df, name, is_train=True, use_slopes=False):
 
         
     ages = df[["pid", "Age"]].groupby(["pid"]).mean()
-    counts = df[["pid"]+feature_names].groupby(["pid"]).count().add_suffix("_n")
+    counts = df[["pid"]+feature_names].groupby(["pid"]).count().add_suffix("_n")/12
     avgs = df[["pid"]+feature_names].groupby(["pid"]).mean().add_suffix("_avg")
     mins = df[["pid"]+feature_names].groupby(["pid"]).min().add_suffix("_min")
     maxs = df[["pid"]+feature_names].groupby(["pid"]).max().add_suffix("_max")
@@ -96,6 +96,40 @@ def main(df, name, is_train=True, use_slopes=False):
     print(datetime.datetime.now())
 
 
+    ## Normalize features
+    if is_train:
+        normalisation = {}
+        for feature_name in feature_names:
+            for suffix in feature_suffixes:
+                if suffix == "n": continue   # No scaling for number of measurements
+                feature_name_full = feature_name + "_" + suffix
+                # Std scaling
+                df_preprocessed[feature_name_full], avg, std = std_scaler(df_preprocessed[feature_name_full], df_preprocessed[feature_name + "_n"])
+                print("%s mean: %.3f   std: %.3f" %(feature_name_full, avg, std))
+                normalisation[feature_name_full] = {"mean": avg, "std": std}
+
+        # Age
+        feature_name_full = "Age"
+        df_preprocessed[feature_name_full], avg, std = std_scaler(df_preprocessed[feature_name_full], df_preprocessed[feature_name + "_n"])
+        print("%s mean: %.3f   std: %.3f" %(feature_name_full, avg, std))
+        normalisation[feature_name_full] = {"mean": avg, "std": std}
+
+        with open(name + '_normalisation.json', 'w') as f:
+           json.dump(normalisation, f)
+
+    else:
+        with open(name.replace("test", "train") + '_normalisation.json') as f:
+            normalisation = json.load(f)
+        for feature_name in feature_names:
+            for suffix in feature_suffixes:
+                if suffix == "n": continue   # No scaling for number of measurements
+                feature_name_full = feature_name + "_" + suffix
+                df_preprocessed[feature_name_full] = scale(df_preprocessed[feature_name_full], normalisation[feature_name_full]["mean"], normalisation[feature_name_full]["std"])
+
+        # Age
+        feature_name_full = "Age"
+        df_preprocessed[feature_name_full] = scale(df_preprocessed[feature_name_full], normalisation[feature_name_full]["mean"], normalisation[feature_name_full]["std"])
+
 
     ## Replace NaNs of a column by the average of the column
     if is_train:
@@ -110,11 +144,11 @@ def main(df, name, is_train=True, use_slopes=False):
                 imputation[feature_name_full] = feature_avg
                 df_preprocessed[feature_name_full].replace(np.nan, feature_avg, inplace=True)
 
-        with open('imputation.json', 'w') as f:
+        with open(name + '_imputation.json', 'w') as f:
            json.dump(imputation, f)
 
     else:
-        with open('imputation.json') as f:
+        with open(name.replace("test", "train") + '_imputation.json') as f:
             imputation = json.load(f)
 
         for feature_name in feature_names:
@@ -124,40 +158,6 @@ def main(df, name, is_train=True, use_slopes=False):
                 feature_avg = imputation[feature_name_full]
                 df_preprocessed[feature_name_full].replace(np.nan, feature_avg, inplace=True)
 
-
-    ## Normalize features
-    if is_train:
-        normalisation = {}
-        for feature_name in feature_names:
-            for suffix in feature_suffixes:
-                if suffix == "n": continue   # No scaling for number of measurements
-                feature_name_full = feature_name + "_" + suffix
-                # Std scaling
-                df_preprocessed[feature_name_full], avg, std = std_scaler(df_preprocessed[feature_name_full])
-                print("%s mean: %.3f   std: %.3f" %(feature_name_full, avg, std))
-                normalisation[feature_name_full] = {"mean": avg, "std": std}
-
-        # Age
-        feature_name_full = "Age"
-        df_preprocessed[feature_name_full], avg, std = std_scaler(df_preprocessed[feature_name_full])
-        print("%s mean: %.3f   std: %.3f" %(feature_name_full, avg, std))
-        normalisation[feature_name_full] = {"mean": avg, "std": std}
-
-        with open(name + 'normalisation.json', 'w') as f:
-           json.dump(normalisation, f)
-
-    else:
-        with open(name.replace("test", "train") + 'normalisation.json') as f:
-            normalisation = json.load(f)
-        for feature_name in feature_names:
-            for suffix in feature_suffixes:
-                if suffix == "n": continue   # No scaling for number of measurements
-                feature_name_full = feature_name + "_" + suffix
-                df_preprocessed[feature_name_full] = scale(df_preprocessed[feature_name_full], normalisation[feature_name_full]["mean"], normalisation[feature_name_full]["std"])
-
-        # Age
-        feature_name_full = "Age"
-        df_preprocessed[feature_name_full] = scale(df_preprocessed[feature_name_full], normalisation[feature_name_full]["mean"], normalisation[feature_name_full]["std"])
 
     print("=======================")
     print("=== FINAL DATAFRAME ===")
