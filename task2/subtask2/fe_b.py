@@ -8,7 +8,7 @@ from sklearn.utils import shuffle
 import pickle
 import os
 
-balanced = True
+balanced = False
 
 #use lite sample
 lite = False
@@ -18,11 +18,18 @@ sel1 = False
 #onecol = True
 #age = True
 #use the avg and slope for the training
-#n_avg = False
+age = False
+age_n = False
+age_n_avg = True
+age_n_avg_diff = False
+age_n_slope = False
+onlyn = False
+n_avg = False
+age_n_avg_slope = False
 #n_avg_diff = False
 #n_avg_diff_slope = True
 
-folder = 'modelB_balanced'+str(balanced)+'_allcol/'
+folder = 'modelB_balanced'+str(balanced)+'_allcol_agenavgdiff/'
 plt.ioff()
 
 os.system('mkdir -p %s' %folder)
@@ -41,7 +48,7 @@ train_labels_original.index = train_labels_original["pid"]
 print(train_features_original)
 print(train_labels_original)
 
-no_feat = ['LABEL_BaseExcess', 'LABEL_Fibrinogen', 'LABEL_AST', 'LABEL_Alkalinephos', 'LABEL_Bilirubin_total', 'LABEL_Lactate', 'LABEL_TroponinI', 'LABEL_SaO2', 'LABEL_Bilirubin_direct', 'LABEL_EtCO2']
+'''no_feat = ['LABEL_BaseExcess', 'LABEL_Fibrinogen', 'LABEL_AST', 'LABEL_Alkalinephos', 'LABEL_Bilirubin_total', 'LABEL_Lactate', 'LABEL_TroponinI', 'LABEL_SaO2', 'LABEL_Bilirubin_direct', 'LABEL_EtCO2']
 ok_feat= []
 for col in train_features_original.columns:
     flag = 0
@@ -55,6 +62,7 @@ for col in train_features_original.columns:
     else:
         ok_feat.append(col)
 #ok_feat = [ col for col in train_features_original.columns if no_feat.split("LABEL_")[0] not in col]
+'''
 label_features = ['LABEL_Sepsis']
 
 models = []
@@ -65,10 +73,51 @@ for lab in label_features:
     train_features = train_features_original.iloc[:,1:].copy()
     train_labels = train_labels_original[lab].copy()
 
-    if sel1:
+    '''if sel1:
         train_features =train_features[ok_feat].copy()
         print(train_features.columns)
+    '''
+    if age:
+        list_feat = [col for col in train_features.columns if ("Age" in col)]
+        train_features = train_features[list_feat]
+        print("Chosen columns for the training:",train_features.columns)
 
+    if age_n:
+        list_feat = [col for col in train_features.columns if ("_n" in col or "Age" in col)]
+        train_features = train_features[list_feat]
+        print("Chosen columns for the training:",train_features.columns)
+
+    if onlyn:
+        list_feat = [col for col in train_features.columns if ("_n" in col)]
+        train_features = train_features[list_feat]
+        print("Chosen columns for the training:",train_features.columns)
+
+    if age_n_avg:
+        list_feat = [col for col in train_features.columns if ("_n" in col or "Age" in col or "_avg" in col)]
+        train_features = train_features[list_feat]
+        print("Chosen columns for the training:",train_features.columns)
+
+    if n_avg:
+        list_feat = [col for col in train_features.columns if ("_n" in col  or "_avg" in col)]
+        train_features = train_features[list_feat]
+        print("Chosen columns for the training:",train_features.columns)
+
+    if age_n_avg_diff:
+        list_feat = [col for col in train_features.columns if ("_n" in col or "Age" in col or "_avg" in col or "_diff" in col)]
+        train_features = train_features[list_feat]
+        print("Chosen columns for the training:",train_features.columns)
+
+    if age_n_slope:
+        list_feat = [col for col in train_features.columns if ("_n" in col or "Age" in col or "_slope" in col )]
+        train_features = train_features[list_feat]
+        print("Chosen columns for the training:",train_features.columns)
+
+    if age_n_avg_slope:
+        list_feat = [col for col in train_features.columns if ("_n" in col or "Age" in col or "_slope" in col or "_avg" in col )]
+        train_features = train_features[list_feat]
+        print("Chosen columns for the training:",train_features.columns)
+
+        
     if balanced:
         #BALANCED
         train_features_0 = train_features[train_labels == 0.].copy()
