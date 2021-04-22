@@ -62,7 +62,7 @@ def main(df, name, is_train=True, use_slopes=False):
 
     df_preprocessed = df.copy()
 
-    ## Normalize features
+    ## Normalize features (Age will be done later)
     if is_train:
         normalisation = {}
         for feature_name in feature_names:
@@ -70,12 +70,9 @@ def main(df, name, is_train=True, use_slopes=False):
             df_preprocessed[feature_name], avg, std = std_scaler(df_preprocessed[feature_name])
             print("%s mean: %.3f   std: %.3f" %(feature_name, avg, std))
             normalisation[feature_name] = {"mean": avg, "std": std}
-
-        with open('normalisation.json', 'w') as f:
-           json.dump(normalisation, f)
-
+            # normalisation json data saved when normalizing age
     else:
-        with open('normalisation.json') as f:
+        with open(name.replace("test", "train") + '_normalisation.json') as f:
             normalisation = json.load(f)
         for feature_name in feature_names:
             df_preprocessed[feature_name] = scale(df_preprocessed[feature_name], normalisation[feature_name]["mean"], normalisation[feature_name]["std"])
@@ -107,6 +104,20 @@ def main(df, name, is_train=True, use_slopes=False):
     counts = df[["pid"]+feature_names].groupby(["pid"]).count().add_suffix("_n")
     df_preprocessed = pd.concat([ages, df_preprocessed, counts], axis=1)
 
+    ## Normalization for Age
+    if is_train:
+        feature_name_full = "Age"
+        df_preprocessed[feature_name_full], avg, std = std_scaler(df_preprocessed[feature_name_full])
+        print("%s mean: %.3f   std: %.3f" %(feature_name_full, avg, std))
+        normalisation[feature_name_full] = {"mean": avg, "std": std}
+
+        with open(name + '_normalisation.json', 'w') as f:
+           json.dump(normalisation, f)
+    else:
+        # Age
+        feature_name_full = "Age"
+        df_preprocessed[feature_name_full] = scale(df_preprocessed[feature_name_full], normalisation[feature_name_full]["mean"], normalisation[feature_name_full]["std"])
+
 
     ## Add slopes
     if use_slopes:
@@ -125,8 +136,14 @@ def main(df, name, is_train=True, use_slopes=False):
         print("Slope finished at %s" %(datetime.datetime.now()))
  
 
+    print("=======================")
+    print("=== FINAL DATAFRAME ===")
+    print("=======================")
+    print("")
     print(df_preprocessed)
 
+    print("")
+    print("")
 
     ## Save to csv file
     df_preprocessed.to_csv(name + "_preprocessed.csv")

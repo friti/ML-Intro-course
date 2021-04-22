@@ -137,11 +137,17 @@ def main(df, name, is_train=True, use_slopes=False):
                 print("%s mean: %.3f   std: %.3f" %(feature_name_full, avg, std))
                 normalisation[feature_name_full] = {"mean": avg, "std": std}
 
-        with open('normalisation.json', 'w') as f:
+        # Age
+        feature_name_full = "Age"
+        df_preprocessed[feature_name_full], avg, std = std_scaler(df_preprocessed[feature_name_full])
+        print("%s mean: %.3f   std: %.3f" %(feature_name_full, avg, std))
+        normalisation[feature_name_full] = {"mean": avg, "std": std}
+
+        with open(name + 'normalisation.json', 'w') as f:
            json.dump(normalisation, f)
 
     else:
-        with open('normalisation.json') as f:
+        with open(name.replace("test", "train") + 'normalisation.json') as f:
             normalisation = json.load(f)
         for feature_name in feature_names:
             for suffix in feature_suffixes:
@@ -149,8 +155,18 @@ def main(df, name, is_train=True, use_slopes=False):
                 feature_name_full = feature_name + "_" + suffix
                 df_preprocessed[feature_name_full] = scale(df_preprocessed[feature_name_full], normalisation[feature_name_full]["mean"], normalisation[feature_name_full]["std"])
 
+        # Age
+        feature_name_full = "Age"
+        df_preprocessed[feature_name_full] = scale(df_preprocessed[feature_name_full], normalisation[feature_name_full]["mean"], normalisation[feature_name_full]["std"])
+
+    print("=======================")
+    print("=== FINAL DATAFRAME ===")
+    print("=======================")
+    print("")
     print(df_preprocessed.head())
-    print(len(df_preprocessed))
+
+    print("")
+    print("")
 
     # Use pid as index
     #df_preprocessed.set_index("pid", inplace=True)
