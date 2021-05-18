@@ -24,8 +24,9 @@ from sklearn.metrics import roc_auc_score
 
 ## Keras
 from tensorflow.keras.models import Sequential, Model
-from tensorflow.keras.layers import Dense, Input, Flatten, Dropout, BatchNormalization, Activation, concatenate
+from tensorflow.keras.layers import Dense, Input, Flatten, Dropout, BatchNormalization, Activation, concatenate, subtract
 from tensorflow.python.keras.applications.resnet import ResNet50
+from tensorflow.keras.applications.resnet import preprocess_input
 from tensorflow.keras.applications import VGG16
 from tensorflow.python.keras.preprocessing.image import load_img, img_to_array
 
@@ -35,17 +36,19 @@ IMAGE_WIDTH  = 350
 
 def read_and_prep_images(img_path, img_width=IMAGE_WIDTH, img_height=IMAGE_HEIGHT):
     img_names = [ f for f in os.listdir(img_path) if (os.path.isfile(os.path.join(img_path, f)) and f.endswith(".jpg")) ]
-    #img_names = img_names[:500]
-    imgs = { img_name.split(".")[0]: load_img(os.path.join(img_path, img_name), target_size=(img_height, img_width)) for img_name in img_names }
-    imgs = { k: img_to_array(v) for k, v in imgs.items() }
-
-    # Normalize
-    imgs = { k: v/255. for k, v in imgs.items() }
+    img_names = img_names[:2500]
+    imgs = [ load_img(os.path.join(img_path, img_name), target_size=(img_height, img_width)) for img_name in img_names ]
+    imgs = np.array([img_to_array(img) for img in imgs])
+    imgs = preprocess_input(imgs)
+    imgs = { k.split(".")[0]: v for k, v in zip(img_names, imgs) }
 
     return imgs
 
+    #imgs = { img_name.split(".")[0]: load_img(os.path.join(img_path, img_name), target_size=(img_height, img_width)) for img_name in img_names }
+    # Normalize
+    #imgs = { k: v/255. for k, v in imgs.items() }
+
     #img_array = np.array([img_to_array(img) for img in imgs])
-    #output = preprocess_input(img_array)
     #return output
 
 
@@ -56,18 +59,15 @@ def int2key(x):
 def make_triplets(images, triplet_file):
     
     triplets = np.loadtxt(triplet_file)
-    #print(triplets[:10])
-    #images_keys = list(images.keys())
-    #print(images_keys)
-    #triplets = [ x for x in triplets if int2key(x[0]) in images_keys and int2key(x[1]) in images_keys and int2key(x[2]) in images_keys ]
-    data = np.array([ [images[int2key(x[0])], images[int2key(x[1])], images[int2key(x[2])]] for x in triplets ])
+    triplets = [ x for x in triplets if int2key(x[0]) in images.keys() and int2key(x[1]) in images.keys() and int2key(x[2]) in images.keys() ]
+    data = np.array([ np.array([images[int2key(x[0])], images[int2key(x[1])], images[int2key(x[2])]]) for x in triplets ])
 
     return data
 
     
 def make_0_triplets(data1):
 
-    data0 = np.array([ [ im[0], im[2], im[1] ] for im in data1 ])
+    data0 = np.array([ np.array([ im[0], im[2], im[1] ]) for im in data1 ])
     return data0
     
 
@@ -113,10 +113,17 @@ def create_model(img_width=IMAGE_WIDTH, img_height=IMAGE_HEIGHT, resnet_weights=
     ##tower_3 = MaxPooling2D((1, 6), strides=(1, 1), padding='same')(tower_3)
     #tower_3.trainable = False
 
-    merged = concatenate([tower_1, tower_2, tower_3], axis=1)
-    merged = Flatten()(merged)
+    difference_1 = subtract([tower_2, tower_1])
+    difference_2 = subtract([tower_3, tower_1])
 
-    out = Dense(100, activation='relu')(merged)
+    #merged = concatenate([tower_1, tower_2, tower_3], axis=1)
+    merged = concatenate([difference_1, difference_2], axis=1)
+    merged = Flatten()(merged)
+    merged = Dropout(0.2)(merged)
+
+    out = Dense(20, activation='relu')(merged)
+    #out1 = Dropout(0.2)(out1)
+    #out2 = Dense(20, activation='relu')(out2)
     out = Dense(2, activation='softmax')(out)
 
     #model = Model(input_shape, out)
@@ -138,6 +145,7 @@ def main():
     images = read_and_prep_images(img_path)
 
     #keys = list(images.keys())
+    #print(keys)
     #print(images[keys[0]])
 
     ## Make train data
@@ -153,7 +161,7 @@ def main():
 
     ## Make output
     y = np.array( len(data1) * [1.] + len(data0) * [0.] )
-    y_2D = list(map(list, zip(y, not_(y))))
+    y_2D = np.array(list(map(list, zip(y, not_(y)))))
 
     print(np.shape(y))
     print(np.shape(y_2D))
@@ -173,46 +181,21 @@ def main():
 
     model.compile(
       optimizer='adam',
-      #loss='binary_crossentropy',
-      loss='MSE',
-      metrics=['MSE', 'acc', 'AUC'],
+      loss='binary_crossentropy',
+      metrics=['acc', 'AUC'],
     )
    
 
     print("\nFitting...")
-    history = model.fit(X_train, y_2D_train,
-                        validation_data=(X_validation, y_2D_validation),
-                        #class_weight=class_weights,
-                        epochs=10,
-                        batch_size=32)
+    history = model.fit((X_train[:,0], X_train[:,1], X_train[:,2]), y_2D_train,
+                        validation_data=((X_validation[:,0], X_validation[:,1], X_validation[:,2]), y_2D_validation),
+                        epochs=20,
+                        batch_size=250)
 
-
-#    ## NN model
-#    print("\nDefining model...")
-#    activation = 'relu'
-#
-#    model = Sequential()
-#
-#    model.add(Dense(300, input_dim=X_train.shape[1]))
-#    model.add(Activation(activation))
-#    #model.add(BatchNormalization())
-#    model.add(Dropout(0.3))
-#
-#    model.add(Dense(200))
-#    model.add(Activation(activation))
-#    #model.add(BatchNormalization())
-#    model.add(Dropout(0.3))
-#
-#    model.add(Dense( 2, activation='softmax', name='output'))
-
-
-#    print("Model summary:")
-#    print(model.summary())
-#
 
     ## Prediction on the test dataset
     print("\nPredictions for the test sample...")
-    y_pred_proba = model.predict(X_test)
+    y_pred_proba = model.predict((X_test[:,0], X_test[:,1], X_test[:,2]))
     print(y_pred_proba)
     auc = roc_auc_score(y_2D_test[:,0], y_pred_proba[:,0])
     print("ROC AUC: %.2f" %auc)
