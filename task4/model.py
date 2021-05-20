@@ -126,7 +126,7 @@ def make_0_triplets(data1):
     return data0
     
 
-def create_model(input_size):
+def create_model(input_size, n_units, dropout):
 
     input_1 = Input(shape=(input_size,))
     input_2 = Input(shape=(input_size,))
@@ -138,9 +138,9 @@ def create_model(input_size):
 
     merged = concatenate([input_1, input_2, input_3], axis=1)
 
-    l1 = Dense(40, activation='relu')(merged)
+    l1 = Dense(n_units, activation='relu')(merged)
     l1 = BatchNormalization()(l1)
-    l1 = Dropout(0.5)(l1)
+    l1 = Dropout(dropout)(l1)
 
     #l2 = Dense(20, activation='relu')(l1)
     #l2 = BatchNormalization()(l2)
@@ -258,7 +258,7 @@ def main(model_name):
 
 
     ## Make model
-    model = create_model(np.shape(X_train)[2])
+    model = create_model(np.shape(X_train)[2], params["n_units"], params["dropout"])
     
     print("Model summary:")
     print(model.summary())
@@ -274,8 +274,8 @@ def main(model_name):
     print("\nFitting...")
     history = model.fit((X_train[:, 0], X_train[:, 1], X_train[:, 2]), y_2D_train,
                         validation_data=((X_validation[:, 0], X_validation[:, 1], X_validation[:, 2]), y_2D_validation),
-                        epochs=8,
-                        batch_size=512)
+                        epochs=params["n_epochs"],
+                        batch_size=params["batch_size"])
 
 
     ## Prediction on the test dataset
@@ -338,4 +338,26 @@ if __name__ == "__main__":
 
     model_name = "VGG19"
 
-    main(model_name)
+    grid = []
+    for n_epochs in [5, 7, 8, 9, 10, 12, 15, 20]:
+        for batch_size in [64, 512, 2048]:
+	    for dropout in [0.1, 0.25, 0.5, 0.75, 0.9]:
+		for n_units in [10, 20, 30, 40, 50, 100]:
+		    grid.append({
+			"n_epochs": n_epochs,
+			"batch_size": batch_size,
+			"dropout": dropout,
+			"n_units": n_units,
+		    })
+
+    for params in grid:
+        params["accuracy"] = main(model_name, params)
+
+    print("Grid search results:")
+    best_accuracy = 0
+    best_params = {}
+    for params in grid:
+        for k, v in params.items():
+            print("\n%s: %.2f" %(k, v))
+        if params["accuracy"] > best_accuracy:
+            best_params = params
