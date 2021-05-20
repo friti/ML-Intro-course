@@ -26,13 +26,15 @@ from sklearn.metrics import roc_auc_score
 ## Keras
 from tensorflow.keras.models import Sequential, Model
 from tensorflow.keras.layers import Dense, Input, Flatten, Dropout, BatchNormalization, Activation, concatenate, subtract
-from tensorflow.keras.applications.resnet import preprocess_input
+from tensorflow.keras.applications.resnet import preprocess_input as preprocess_input_ResNet50
+from tensorflow.keras.applications.vgg16 import preprocess_input as preprocess_input_VGG16
+from tensorflow.keras.applications.vgg19 import preprocess_input as preprocess_input_VGG19
 from tensorflow.keras.applications import ResNet50, VGG16, VGG19
 from tensorflow.python.keras.preprocessing.image import load_img, img_to_array
 
  
-IMAGE_HEIGHT = 240
-IMAGE_WIDTH  = 350
+IMAGE_HEIGHT = 342
+IMAGE_WIDTH  = 512
 
 def get_id_from_path(path):
     return int(path.split("/")[-1].split(".")[0])
@@ -44,33 +46,19 @@ def make_list_of_image_paths(imageDirectory):
 
     return listSorted
 
-def read_and_prep_image(image_path, img_width=IMAGE_WIDTH, img_height=IMAGE_HEIGHT):
+def read_and_prep_image(image_path, modelName, img_width=IMAGE_WIDTH, img_height=IMAGE_HEIGHT):
     image_raw = load_img(image_path, target_size=(img_height, img_width))
     image_array = np.array([img_to_array(image_raw)])
-    image = preprocess_input(image_array)
+    if modelName == "ResNet50":
+        image = preprocess_input_ResNet50(image_array)
+    elif modelName == "VGG16":
+        image = preprocess_input_VGG16(image_array)
+    elif modelName == "VGG19":
+        image = preprocess_input_VGG19(image_array)
     return image
 
 
-def int2key(x):
-    return "%05d" %x
-
-def make_triplets(images, triplet_file):
-    
-    triplets = np.loadtxt(triplet_file)
-    triplets = [ x for x in triplets if int2key(x[0]) in images.keys() and int2key(x[1]) in images.keys() and int2key(x[2]) in images.keys() ]
-    data = np.array([ np.array([images[int2key(x[0])], images[int2key(x[1])], images[int2key(x[2])]]) for x in triplets ])
-
-    return data
-
-    
-def make_0_triplets(data1):
-
-    data0 = np.array([ np.array([ im[0], im[2], im[1] ]) for im in data1 ])
-    return data0
-    
-
-#resnet_weights_path='./models/resnet50_notop.h5'
-def create_model(img_width=IMAGE_WIDTH, img_height=IMAGE_HEIGHT, weights="imagenet", modelName="ResNet50"):
+def create_model(modelName, img_width=IMAGE_WIDTH, img_height=IMAGE_HEIGHT, weights="imagenet"):
 
     input_ = Input(shape=(img_height, img_width, 3,))
 
@@ -109,7 +97,7 @@ def not_(x):
 def main(modelName):
 
     ## Initialize output CSV file
-    featuresDirectory = "preprocessed_features/"
+    featuresDirectory = "preprocessed_features_max_size/"
     if not os.path.exists(featuresDirectory): os.makedirs(featuresDirectory)
 
     filename = featuresDirectory + modelName + "_features.csv"
@@ -131,7 +119,7 @@ def main(modelName):
 
     ## Make model
     print("\nCreate %s model..." %modelName)
-    model = create_model(modelName=modelName)
+    model = create_model(modelName)
     print("Model summary:")
     print(model.summary())
 
@@ -146,7 +134,7 @@ def main(modelName):
             print("%d%% completed" %progress)
 
         # Load the image
-        image = read_and_prep_image(imagePath)
+        image = read_and_prep_image(imagePath, modelName)
 
         # Compute latent features
         features = model.predict(image)
@@ -164,6 +152,6 @@ def main(modelName):
 
 if __name__ == "__main__":
 
-    modelName = "ResNet50"
+    modelName = "VGG19"
 
-    #main(modelName=modelName)
+    main(modelName=modelName)
