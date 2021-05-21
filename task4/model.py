@@ -31,6 +31,7 @@ from tensorflow.python.keras.applications.resnet import ResNet50
 from tensorflow.keras.applications.resnet import preprocess_input
 from tensorflow.keras.applications import VGG16
 from tensorflow.python.keras.preprocessing.image import load_img, img_to_array
+from tensorflow.keras import regularizers
 
 
 
@@ -126,7 +127,7 @@ def make_0_triplets(data1):
     return data0
     
 
-def create_model(input_size, n_units, dropout):
+def create_model(input_size, n_units, dropout, regularisation):
 
     input_1 = Input(shape=(input_size,))
     input_2 = Input(shape=(input_size,))
@@ -138,7 +139,7 @@ def create_model(input_size, n_units, dropout):
 
     merged = concatenate([input_1, input_2, input_3], axis=1)
 
-    l1 = Dense(n_units, activation='relu')(merged)
+    l1 = Dense(n_units, activation='relu', kernel_regularizer=regularizers.l2(regularisation))(merged)
     l1 = BatchNormalization()(l1)
     l1 = Dropout(dropout)(l1)
 
@@ -157,11 +158,16 @@ def not_(x):
     return -x+1
 
 
-def main(model_name):
+def main(model_name, params):
+
+    ## Print parameters
+    print("\nRun parameters:")
+    for k, v in params.items():
+        print("%s: %.3f" %(k, v))
 
 
     ## Read data
-    print("Reading features...")
+    print("\nReading features...")
     train_df = pd.read_csv(features_directory + model_name + "_features.csv", delimiter=',')
     ids = train_df.id.tolist()
     train_df = train_df.drop(["id"], axis=1)
@@ -258,7 +264,7 @@ def main(model_name):
 
 
     ## Make model
-    model = create_model(np.shape(X_train)[2], params["n_units"], params["dropout"])
+    model = create_model(np.shape(X_train)[2], params["n_units"], params["dropout"], params["regularisation"])
     
     print("Model summary:")
     print(model.summary())
@@ -308,18 +314,24 @@ def main(model_name):
     best_cut = 0.5
     y_pred = y_pred_proba[:, 0] >= best_cut
 
-    print("Accuracy: %.3f" %(accuracy_score(y_2D_test[:, 0], y_pred)))
+    accuracy = accuracy_score(y_2D_test[:, 0], y_pred)
+    auc = roc_auc_score(y_2D_test[:, 0], y_pred)
+    print("Accuracy: %.3f" %accuracy)
+    print("AUC: %.3f" %auc)
 
 
     ## Control plots
     # Loss
     for variable in ("loss", "acc"):
-	plt.figure()
-	plot_var(variable, history)
-	plt.savefig(variable + ".pdf")
-	plt.close()
+        plt.figure()
+        plot_var(variable, history)
+        plt.savefig(variable + ".pdf")
+        plt.close()
 
-    sys.exit()
+
+    del X_train, X_validation
+
+    return accuracy, auc
 
     ## Load test dataset
     print("\nPredictions for the test dataset...")
@@ -331,33 +343,59 @@ def main(model_name):
     np.savetxt("submit.txt", y_pred_test, fmt="%d")
 
 
-    return
 
 
 if __name__ == "__main__":
 
-    model_name = "VGG19"
+    model_name = "ResNet50"
 
     grid = []
-    for n_epochs in [5, 7, 8, 9, 10, 12, 15, 20]:
-        for batch_size in [64, 512, 2048]:
-	    for dropout in [0.1, 0.25, 0.5, 0.75, 0.9]:
-		for n_units in [10, 20, 30, 40, 50, 100]:
-		    grid.append({
-			"n_epochs": n_epochs,
-			"batch_size": batch_size,
-			"dropout": dropout,
-			"n_units": n_units,
-		    })
+    #for n_epochs in [5, 7, 8, 9, 10, 12, 15, 20]:
+    #    for batch_size in [64, 512, 2048]:
+    #        for dropout in [0.1, 0.25, 0.5, 0.75, 0.9]:
+    #           for n_units in [10, 20, 30, 40, 50, 100]:
+    #for n_epochs in [20]:
+    #    for batch_size in [512]:
+    #        for dropout in [0.2, 0.5, 0.7, 0.9]:
+    #            for n_units in [200]:
+    #                for regularisation in [1e-2, 1e-1, 1.0]:
+    #                    grid.append({
+    #                        "n_epochs": n_epochs,
+    #                        "batch_size": batch_size,
+    #                        "dropout": dropout,
+    #                        "n_units": n_units,
+    #                        "regularisation": regularisation,
+    #                    })
 
+    grid = [{
+	"n_epochs"      : 10,
+	"batch_size"    : 1024,
+	"dropout"       : 0.8,
+	"n_units"       : 150,
+	"regularisation": 0.00,
+    }]
     for params in grid:
-        params["accuracy"] = main(model_name, params)
+        params["accuracy"], params["auc"] = main(model_name, params)
 
-    print("Grid search results:")
+
+    print("\nGrid search results:")
     best_accuracy = 0
-    best_params = {}
+    best_auc = 0
+    best_params_acc = {}
     for params in grid:
+        print("")
         for k, v in params.items():
-            print("\n%s: %.2f" %(k, v))
+            print("%s: %.3f" %(k, v))
         if params["accuracy"] > best_accuracy:
-            best_params = params
+            best_params_acc = params
+            best_accuracy = params["accuracy"]
+        if params["auc"] > best_auc:
+            best_params_auc = params
+            best_auc = params["auc"]
+
+
+    print("\nBest params accuracy:")
+    print(best_params_acc)
+
+    print("\nBest params auc:")
+    print(best_params_auc)
