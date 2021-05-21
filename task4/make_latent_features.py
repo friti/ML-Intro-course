@@ -58,24 +58,24 @@ def read_and_prep_image(image_path, modelName, img_width=IMAGE_WIDTH, img_height
     return image
 
 
-def create_model(modelName, img_width=IMAGE_WIDTH, img_height=IMAGE_HEIGHT, weights="imagenet"):
+def create_model(modelName, pooling, img_width=IMAGE_WIDTH, img_height=IMAGE_HEIGHT, weights="imagenet"):
 
     input_ = Input(shape=(img_height, img_width, 3,))
 
 
     if modelName == "ResNet50":
         base_model = ResNet50(include_top=False,
-                              pooling='avg',
+                              pooling=pooling,
                               weights=weights,
                               input_shape=(img_height, img_width, 3))
     elif modelName == "VGG16":
         base_model = VGG16(include_top=False,
-                           pooling='avg',
+                           pooling=pooling,
                            weights=weights,
                            input_shape=(img_height, img_width, 3))
     elif modelName == "VGG19":
         base_model = VGG19(include_top=False,
-                           pooling='avg',
+                           pooling=pooling,
                            weights=weights,
                            input_shape=(img_height, img_width, 3))
     else:
@@ -94,10 +94,10 @@ def not_(x):
     return -x+1
 
 
-def main(modelName):
+def main(modelName, pooling):
 
     ## Initialize output CSV file
-    featuresDirectory = "preprocessed_features_max_size/"
+    featuresDirectory = "preprocessed_features_max_size_max_pooling/"
     if not os.path.exists(featuresDirectory): os.makedirs(featuresDirectory)
 
     filename = featuresDirectory + modelName + "_features.csv"
@@ -119,7 +119,7 @@ def main(modelName):
 
     ## Make model
     print("\nCreate %s model..." %modelName)
-    model = create_model(modelName)
+    model = create_model(modelName, pooling)
     print("Model summary:")
     print(model.summary())
 
@@ -153,5 +153,6 @@ def main(modelName):
 if __name__ == "__main__":
 
     modelName = "VGG19"
+    pooling = "max"
 
-    main(modelName=modelName)
+    main(modelName, pooling)
