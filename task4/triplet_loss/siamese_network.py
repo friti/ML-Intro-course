@@ -3,6 +3,7 @@ import numpy as np
 import os
 import random
 from sklearn.model_selection import train_test_split
+from sklearn.utils.random import sample_without_replacement
 import tensorflow as tf
 from pathlib import Path
 from tensorflow.keras import applications
@@ -175,6 +176,10 @@ def make_train_validation_test_triplets_list(triplet_file):
 
     triplets = np.loadtxt(triplet_file)
 
+    # sample part of the triplets
+    n_triplets = len(triplets)
+    triplets = triplets[sample_without_replacement(n_population=n_triplets, n_samples=5000)]
+
     train_triplets_file = "./train_triplets_list.txt"
     validation_triplets_file = "./validation_triplets_list.txt"
     test_triplets_file = "./test_triplets_list.txt"
@@ -185,7 +190,7 @@ def make_train_validation_test_triplets_list(triplet_file):
         triplets_test = np.loadtxt(test_triplets_file)
         
     else:
-        train_images = random.sample(range(0, 5000), 1500)  #list(range(0, 3800))
+        train_images = random.sample(range(0, 5000), 2000)  #list(range(0, 3800))
 
         triplets_train = [ t for t in triplets if (t[0] in train_images     and t[1] in train_images     and t[2] in train_images)     ]
         triplets_vt    = [ t for t in triplets if (t[0] not in train_images and t[1] not in train_images and t[2] not in train_images) ]
@@ -233,7 +238,7 @@ def make_list_of_image_paths(imageDirectory):
 
 def load_triplets(triplets_train, triplets_validation, triplets_test):
 
-    batch_size = 512
+    batch_size = 64
 
     imageDirectory = "../datasets/food/"
     listOfImagePaths = make_list_of_image_paths(imageDirectory)
@@ -281,6 +286,7 @@ def main():
     siamese_model.compile(optimizer=optimizers.Adam(0.0001))
     siamese_model.fit(dataset_train, epochs=5, validation_data=dataset_val)
 
+    siamese_model.save("test")
 
 
 if __name__ == "__main__":
