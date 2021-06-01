@@ -82,6 +82,7 @@ class SiameseModel(Model):
         self.siamese_network = siamese_network
         self.margin = margin
         self.loss_tracker = metrics.Mean(name="loss")
+        self.acc_tracker = metrics.Mean(name="acc")
 
     def call(self, inputs):
         return self.siamese_network(inputs)
@@ -93,6 +94,7 @@ class SiameseModel(Model):
         # `compile()`.
         with tf.GradientTape() as tape:
             loss = self._compute_loss(data)
+            acc = self._compute_acc(data)
 
         # Storing the gradients of the loss function with respect to the
         # weights/parameters.
@@ -105,14 +107,16 @@ class SiameseModel(Model):
 
         # Let's update and return the training loss metric.
         self.loss_tracker.update_state(loss)
-        return {"loss": self.loss_tracker.result()}
+        self.acc_tracker.update_state(acc)
+        return {"loss": self.loss_tracker.result(), "acc": self.acc_tracker.result()}
 
     def test_step(self, data):
         loss = self._compute_loss(data)
 
         # Let's update and return the loss metric.
         self.loss_tracker.update_state(loss)
-        return {"loss": self.loss_tracker.result()}
+        self.acc_tracker.update_state(acc)
+        return {"loss": self.loss_tracker.result(), "acc": self.acc_tracker.result()}
 
     def _compute_loss(self, data):
         # The output of the network is a tuple containing the distances
@@ -126,11 +130,23 @@ class SiameseModel(Model):
         loss = tf.maximum(loss + self.margin, 0.0)
         return loss
 
+    def _compute_acc(self, data):
+        # The output of the network is a tuple containing the distances
+        # between the anchor and the positive example, and the anchor and
+        # the negative example.
+        ap_distance, an_distance = self.siamese_network(data)
+
+        # Computing the Triplet Loss by subtracting both distances and
+        # making sure we don't get a negative value.
+        #acc = tf.Transform.mean(ap_distance < an_distance)
+        acc = tf.math.reduce_mean(tf.cast(ap_distance < an_distance, dtype=tf.float32))
+        return acc
+
     @property
     def metrics(self):
         # We need to list our metrics here so the `reset_states()` can be
         # called automatically.
-        return [self.loss_tracker]
+        return [self.loss_tracker, self.acc_tracker]
 
 
 
@@ -170,7 +186,25 @@ def create_model():
         inputs=[anchor_input, positive_input, negative_input], outputs=distances
     )
 
-    return siamese_network
+    return embedding, siamese_network
+
+
+def create_embedding():
+
+    base_cnn = resnet.ResNet50(
+        weights="imagenet", input_shape=target_shape + (3,), include_top=False
+    )
+
+    flatten = layers.Flatten()(base_cnn.output)
+    dense1 = layers.Dense(512, activation="relu")(flatten)
+    dense1 = layers.BatchNormalization()(dense1)
+    dense2 = layers.Dense(256, activation="relu")(dense1)
+    dense2 = layers.BatchNormalization()(dense2)
+    output = layers.Dense(256)(dense2)
+
+    embedding = Model(base_cnn.input, output, name="Embedding")
+
+    return embedding
 
 
 def make_train_validation_test_triplets_list(triplet_file):
@@ -191,7 +225,7 @@ def make_train_validation_test_triplets_list(triplet_file):
         triplets_test = np.loadtxt(test_triplets_file)
         
     else:
-        train_images = random.sample(range(0, 5000), 2000)  #list(range(0, 3800))
+        train_images = random.sample(range(0, 5000), 2500)  #list(range(0, 3800))
 
         triplets_train = [ t for t in triplets if (t[0] in train_images     and t[1] in train_images     and t[2] in train_images)     ]
         triplets_vt    = [ t for t in triplets if (t[0] not in train_images and t[1] not in train_images and t[2] not in train_images) ]
@@ -256,15 +290,15 @@ def load_triplets(triplets_train, triplets_validation, triplets_test):
     positive_images_test = [ listOfImagePaths[int(t[1])] for t in triplets_test ]
     negative_images_test = [ listOfImagePaths[int(t[2])] for t in triplets_test ]
 
-    anchor_dataset_train = tf.data.Dataset.from_tensor_slices(anchor_images_train)
+    anchor_dataset_train   = tf.data.Dataset.from_tensor_slices(anchor_images_train)
     positive_dataset_train = tf.data.Dataset.from_tensor_slices(positive_images_train)
     negative_dataset_train = tf.data.Dataset.from_tensor_slices(negative_images_train)
 
-    anchor_dataset_val = tf.data.Dataset.from_tensor_slices(anchor_images_val)
+    anchor_dataset_val   = tf.data.Dataset.from_tensor_slices(anchor_images_val)
     positive_dataset_val = tf.data.Dataset.from_tensor_slices(positive_images_val)
     negative_dataset_val = tf.data.Dataset.from_tensor_slices(negative_images_val)
 
-    anchor_dataset_test = tf.data.Dataset.from_tensor_slices(anchor_images_test)
+    anchor_dataset_test   = tf.data.Dataset.from_tensor_slices(anchor_images_test)
     positive_dataset_test = tf.data.Dataset.from_tensor_slices(positive_images_test)
     negative_dataset_test = tf.data.Dataset.from_tensor_slices(negative_images_test)
 
@@ -282,9 +316,16 @@ def load_triplets(triplets_train, triplets_validation, triplets_test):
     return dataset_train, dataset_val, dataset_test
 
 
-def make_predictions(distances):
+def distance(f1, f2):
+    """Compute distance between arrays of features."""
 
-    return distances[:, 0] < distances[:, 1]
+    return np.sum((np.sum([f1, -f2], axis=0))**2, axis=1)
+
+
+def make_predictions(features_a, features_b, features_c):
+    """Compute predictions"""
+
+    return distance(features_a, features_b) < distance(features_a, features_c)
 
 
 def main_train():
@@ -297,12 +338,21 @@ def main_train():
     dataset_train, dataset_val, dataset_test = load_triplets(triplets_train, triplets_validation, triplets_test)
 
 
-    siamese_network = create_model()
+    embedding, siamese_network = create_model()
     siamese_model = SiameseModel(siamese_network)
     siamese_model.compile(optimizer=optimizers.Adam(0.0001))
-    siamese_model.fit(dataset_train, epochs=1, validation_data=dataset_val)
 
-    siamese_model.save_weights("test")
+    checkpoint_filepath = './checkpoints/{epoch:02d}-{val_loss:.2f}.h5'
+    model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
+	filepath=checkpoint_filepath,
+	save_weights_only=True,
+	monitor='val_loss',
+        save_best_only=False,
+        save_freq="epoch",
+    )
+    siamese_model.fit(dataset_train, epochs=3, validation_data=dataset_val, callbacks=[model_checkpoint_callback])
+
+    embedding.save_weights("test.h5")
 
 
 
@@ -314,16 +364,20 @@ def main_predict():
     triplets_train, triplets_validation, triplets_test = make_train_validation_test_triplets_list(triplet_file)
     dataset_train, dataset_val, dataset_test = load_triplets(triplets_train, triplets_validation, triplets_test)
 
-    siamese_network = create_model()
-    siamese_model = SiameseModel(siamese_network)
-    siamese_model.compile(optimizer=optimizers.Adam(0.0001))
-    siamese_model.load_weights("test")
-    distances = siamese_model.predict(dataset_test)
+    embedding, siamese_network = create_model()
+    siamese_network.load_weights("./checkpoints/03-0.66.h5")
 
-    print(distances)
-    print(np.shape(distances))
+    a = dataset_test.map(lambda a, b, c: a)
+    b = dataset_test.map(lambda a, b, c: b)
+    c = dataset_test.map(lambda a, b, c: c)
 
-    prediction = make_predictions(distances)
+    features_a = embedding.predict(a)
+    features_b = embedding.predict(b)
+    features_c = embedding.predict(c)
+
+    predictions = make_predictions(features_a, features_b, features_c)
+    print(predictions)
+    print(np.mean(predictions==1))
 
 
 if __name__ == "__main__":
