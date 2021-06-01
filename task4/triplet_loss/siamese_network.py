@@ -17,10 +17,8 @@ from tensorflow.keras.applications import resnet
 
 
 
-#IMAGE_WIDTH = 512
-#IMAGE_HEIGHT = 342
-IMAGE_WIDTH = 350
-IMAGE_HEIGHT = 240
+IMAGE_WIDTH = 512
+IMAGE_HEIGHT = 342
 target_shape = (IMAGE_HEIGHT, IMAGE_WIDTH)
 
 
@@ -203,7 +201,7 @@ def make_train_validation_test_triplets_list(triplet_file):
 
     # sample part of the triplets
     n_triplets = len(triplets)
-    triplets = triplets[sample_without_replacement(n_population=n_triplets, n_samples=2000)]
+    #triplets = triplets[sample_without_replacement(n_population=n_triplets, n_samples=2000)]
 
     train_triplets_file = "./train_triplets_list.txt"
     validation_triplets_file = "./validation_triplets_list.txt"
