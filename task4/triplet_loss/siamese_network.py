@@ -6,6 +6,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.utils.random import sample_without_replacement
 import tensorflow as tf
 from pathlib import Path
+from tensorflow.python.keras.models import load_model, save_model
 from tensorflow.keras import applications
 from tensorflow.keras import layers
 from tensorflow.keras import losses
@@ -178,7 +179,7 @@ def make_train_validation_test_triplets_list(triplet_file):
 
     # sample part of the triplets
     n_triplets = len(triplets)
-    triplets = triplets[sample_without_replacement(n_population=n_triplets, n_samples=5000)]
+    triplets = triplets[sample_without_replacement(n_population=n_triplets, n_samples=2000)]
 
     train_triplets_file = "./train_triplets_list.txt"
     validation_triplets_file = "./validation_triplets_list.txt"
@@ -251,6 +252,10 @@ def load_triplets(triplets_train, triplets_validation, triplets_test):
     positive_images_val = [ listOfImagePaths[int(t[1])] for t in triplets_validation ]
     negative_images_val = [ listOfImagePaths[int(t[2])] for t in triplets_validation ]
 
+    anchor_images_test   = [ listOfImagePaths[int(t[0])] for t in triplets_test ]
+    positive_images_test = [ listOfImagePaths[int(t[1])] for t in triplets_test ]
+    negative_images_test = [ listOfImagePaths[int(t[2])] for t in triplets_test ]
+
     anchor_dataset_train = tf.data.Dataset.from_tensor_slices(anchor_images_train)
     positive_dataset_train = tf.data.Dataset.from_tensor_slices(positive_images_train)
     negative_dataset_train = tf.data.Dataset.from_tensor_slices(negative_images_train)
@@ -259,37 +264,70 @@ def load_triplets(triplets_train, triplets_validation, triplets_test):
     positive_dataset_val = tf.data.Dataset.from_tensor_slices(positive_images_val)
     negative_dataset_val = tf.data.Dataset.from_tensor_slices(negative_images_val)
 
+    anchor_dataset_test = tf.data.Dataset.from_tensor_slices(anchor_images_test)
+    positive_dataset_test = tf.data.Dataset.from_tensor_slices(positive_images_test)
+    negative_dataset_test = tf.data.Dataset.from_tensor_slices(negative_images_test)
+
     dataset_train = tf.data.Dataset.zip((anchor_dataset_train, positive_dataset_train, negative_dataset_train)).shuffle(buffer_size=1024)
     dataset_val   = tf.data.Dataset.zip((anchor_dataset_val  , positive_dataset_val  , negative_dataset_val  )).shuffle(buffer_size=1024)
+    dataset_test  = tf.data.Dataset.zip((anchor_dataset_test , positive_dataset_test , negative_dataset_test )).shuffle(buffer_size=1024)
     dataset_train = dataset_train.map(preprocess_triplets)
     dataset_val   = dataset_val.map(preprocess_triplets)
+    dataset_test  = dataset_test.map(preprocess_triplets)
 
     dataset_train = dataset_train.batch(batch_size, drop_remainder=False)
     dataset_val   = dataset_val.batch(batch_size, drop_remainder=False)
+    dataset_test  = dataset_test.batch(batch_size, drop_remainder=False)
 
-    return dataset_train, dataset_val
+    return dataset_train, dataset_val, dataset_test
 
 
+def make_predictions(distances):
 
-def main():
+    return distances[:, 0] < distances[:, 1]
+
+
+def main_train():
 
     
     ## Make train data
     print("\nMaking datasets...")
     triplet_file = "../datasets/train_triplets.txt"
     triplets_train, triplets_validation, triplets_test = make_train_validation_test_triplets_list(triplet_file)
-    dataset_train, dataset_val = load_triplets(triplets_train, triplets_validation, triplets_test)
+    dataset_train, dataset_val, dataset_test = load_triplets(triplets_train, triplets_validation, triplets_test)
 
 
     siamese_network = create_model()
     siamese_model = SiameseModel(siamese_network)
     siamese_model.compile(optimizer=optimizers.Adam(0.0001))
-    siamese_model.fit(dataset_train, epochs=5, validation_data=dataset_val)
+    siamese_model.fit(dataset_train, epochs=1, validation_data=dataset_val)
 
-    siamese_model.save("test")
+    siamese_model.save_weights("test")
+
+
+
+def main_predict():
+
+    ## Make train data
+    print("\nMaking datasets...")
+    triplet_file = "../datasets/train_triplets.txt"
+    triplets_train, triplets_validation, triplets_test = make_train_validation_test_triplets_list(triplet_file)
+    dataset_train, dataset_val, dataset_test = load_triplets(triplets_train, triplets_validation, triplets_test)
+
+    siamese_network = create_model()
+    siamese_model = SiameseModel(siamese_network)
+    siamese_model.compile(optimizer=optimizers.Adam(0.0001))
+    siamese_model.load_weights("test")
+    distances = siamese_model.predict(dataset_test)
+
+    print(distances)
+    print(np.shape(distances))
+
+    prediction = make_predictions(distances)
 
 
 if __name__ == "__main__":
 
-    main()
+    main_train()
+    #main_predict()
 
