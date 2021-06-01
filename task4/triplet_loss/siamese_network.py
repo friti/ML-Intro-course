@@ -93,8 +93,9 @@ class SiameseModel(Model):
         # the gradients and apply them using the optimizer specified in
         # `compile()`.
         with tf.GradientTape() as tape:
-            loss = self._compute_loss(data)
-            acc = self._compute_acc(data)
+            ap_distance, an_distance = self._compute_distances(data)
+            loss = self._compute_loss(ap_distance, an_distance)
+            acc = self._compute_acc(ap_distance, an_distance)
 
         # Storing the gradients of the loss function with respect to the
         # weights/parameters.
@@ -111,31 +112,30 @@ class SiameseModel(Model):
         return {"loss": self.loss_tracker.result(), "acc": self.acc_tracker.result()}
 
     def test_step(self, data):
-        loss = self._compute_loss(data)
+        ap_distance, an_distance = self._compute_distances(data)
+        loss = self._compute_loss(ap_distance, an_distance)
+        acc = self._compute_acc(ap_distance, an_distance)
 
         # Let's update and return the loss metric.
         self.loss_tracker.update_state(loss)
         self.acc_tracker.update_state(acc)
         return {"loss": self.loss_tracker.result(), "acc": self.acc_tracker.result()}
 
-    def _compute_loss(self, data):
+    def _compute_distances(self, data):
         # The output of the network is a tuple containing the distances
         # between the anchor and the positive example, and the anchor and
         # the negative example.
         ap_distance, an_distance = self.siamese_network(data)
+        return ap_distance, an_distance
 
+    def _compute_loss(self, ap_distance, an_distance):
         # Computing the Triplet Loss by subtracting both distances and
         # making sure we don't get a negative value.
         loss = ap_distance - an_distance
         loss = tf.maximum(loss + self.margin, 0.0)
         return loss
 
-    def _compute_acc(self, data):
-        # The output of the network is a tuple containing the distances
-        # between the anchor and the positive example, and the anchor and
-        # the negative example.
-        ap_distance, an_distance = self.siamese_network(data)
-
+    def _compute_acc(self, ap_distance, an_distance):
         # Computing the Triplet Loss by subtracting both distances and
         # making sure we don't get a negative value.
         #acc = tf.Transform.mean(ap_distance < an_distance)
@@ -149,8 +149,7 @@ class SiameseModel(Model):
         return [self.loss_tracker, self.acc_tracker]
 
 
-
-def create_model():
+def create_embedding():
 
     base_cnn = resnet.ResNet50(
         weights="imagenet", input_shape=target_shape + (3,), include_top=False
@@ -159,8 +158,10 @@ def create_model():
     flatten = layers.Flatten()(base_cnn.output)
     dense1 = layers.Dense(512, activation="relu")(flatten)
     dense1 = layers.BatchNormalization()(dense1)
+    dense1 = layers.Dropout(0.5)(dense1)
     dense2 = layers.Dense(256, activation="relu")(dense1)
     dense2 = layers.BatchNormalization()(dense2)
+    dense2 = layers.Dropout(0.5)(dense2)
     output = layers.Dense(256)(dense2)
 
     embedding = Model(base_cnn.input, output, name="Embedding")
@@ -170,6 +171,13 @@ def create_model():
         if layer.name == "conv5_block1_out":
             trainable = True
         layer.trainable = trainable
+
+    return embedding
+
+
+def create_model():
+
+    embedding = create_embedding()
 
 
     anchor_input = layers.Input(name="anchor", shape=target_shape + (3,))
@@ -187,24 +195,6 @@ def create_model():
     )
 
     return embedding, siamese_network
-
-
-def create_embedding():
-
-    base_cnn = resnet.ResNet50(
-        weights="imagenet", input_shape=target_shape + (3,), include_top=False
-    )
-
-    flatten = layers.Flatten()(base_cnn.output)
-    dense1 = layers.Dense(512, activation="relu")(flatten)
-    dense1 = layers.BatchNormalization()(dense1)
-    dense2 = layers.Dense(256, activation="relu")(dense1)
-    dense2 = layers.BatchNormalization()(dense2)
-    output = layers.Dense(256)(dense2)
-
-    embedding = Model(base_cnn.input, output, name="Embedding")
-
-    return embedding
 
 
 def make_train_validation_test_triplets_list(triplet_file):
@@ -340,17 +330,17 @@ def main_train():
 
     embedding, siamese_network = create_model()
     siamese_model = SiameseModel(siamese_network)
-    siamese_model.compile(optimizer=optimizers.Adam(0.0001))
+    siamese_model.compile(optimizer=optimizers.Adam(0.0005))
 
-    checkpoint_filepath = './checkpoints/{epoch:02d}-{val_loss:.2f}.h5'
+    checkpoint_filepath = './checkpoints/{epoch:02d}-{val_loss:.2f}-{val_acc:.2f}.h5'
     model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
-	filepath=checkpoint_filepath,
-	save_weights_only=True,
-	monitor='val_loss',
+        filepath=checkpoint_filepath,
+        save_weights_only=True,
+        monitor='val_loss',
         save_best_only=False,
         save_freq="epoch",
     )
-    siamese_model.fit(dataset_train, epochs=3, validation_data=dataset_val, callbacks=[model_checkpoint_callback])
+    siamese_model.fit(dataset_train, epochs=15, validation_data=dataset_val, callbacks=[model_checkpoint_callback])
 
     embedding.save_weights("test.h5")
 
