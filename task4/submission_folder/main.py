@@ -42,6 +42,7 @@ def plot_var(variable, history):
 def int2key(x):
     return "%05d" %x
 
+# Uncomment this to have set of train, validation and test without image repetition
 '''def make_train_validation_test_triplets_list(triplet_file):
 
     triplets = np.loadtxt(triplet_file)
@@ -75,6 +76,7 @@ def int2key(x):
 
 
     return triplets_train, triplets_validation, triplets_test'''
+
 def make_train_validation_test_triplets_list(triplet_file):
 
     triplets = np.loadtxt(triplet_file)
@@ -126,9 +128,7 @@ def create_model(input_size, n_units, dropout):
 
     merged = concatenate([input_1, input_2, input_3], axis=1)
 
-    #l1 = Dense(n_units, activation='relu',kernel_regularizer=regularizers.l2(1e-2),bias_regularizer=regularizers.l2(0.01))(merged)
     l1 = Dense(n_units, activation='relu',kernel_regularizer=regularizers.l2(1e-2))(merged)
-#    l1 = Dense(n_units, activation='relu')(merged)
     l1 = BatchNormalization()(l1)
     l1 = Dropout(dropout)(l1)
 
@@ -335,7 +335,7 @@ if __name__ == "__main__":
     params = {	"n_epochs": 70,
 		"batch_size": 1024,
 		"dropout": 0.7,
-		"n_units": 256,
+		"n_units": 200,
 	      }
     
     # Uncomment this to preprocess the images through a pretrained CNN
