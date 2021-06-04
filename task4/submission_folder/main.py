@@ -43,39 +43,39 @@ def int2key(x):
     return "%05d" %x
 
 # Uncomment this to have set of train, validation and test without image repetition
-'''def make_train_validation_test_triplets_list(triplet_file):
-
-    triplets = np.loadtxt(triplet_file)
-    print(len(triplets))
-
-    train_triplets_file = "./train_triplets_list.txt"
-    validation_triplets_file = "./validation_triplets_list.txt"
-    test_triplets_file = "./test_triplets_list.txt"
-
-    if os.path.exists(train_triplets_file) and os.path.exists(validation_triplets_file) and os.path.exists(test_triplets_file):
-        triplets_train = np.loadtxt(train_triplets_file)
-        triplets_validation = np.loadtxt(validation_triplets_file)
-        triplets_test = np.loadtxt(test_triplets_file)
-        
-    else:
-        # Construct train, validation and test samples such that there are no repetitions of images
-        train_images = list(range(0, 3800))
-
-        triplets_train = [ t for t in triplets if (t[0] in train_images     and t[1] in train_images     and t[2] in train_images)     ]
-        triplets_vt    = [ t for t in triplets if (t[0] not in train_images and t[1] not in train_images and t[2] not in train_images) ]
-
-        triplets_validation, triplets_test = train_test_split(triplets_vt, train_size=0.5)
-
-        np.savetxt(train_triplets_file, triplets_train)
-        np.savetxt(validation_triplets_file, triplets_validation)
-        np.savetxt(test_triplets_file, triplets_test)
-
-    print("Train dataset size:      %d" %(len(triplets_train)))
-    print("Validation dataset size: %d" %(len(triplets_validation)))
-    print("Test dataset size:       %d" %(len(triplets_test)))
-
-
-    return triplets_train, triplets_validation, triplets_test'''
+#def make_train_validation_test_triplets_list(triplet_file):
+#
+#    triplets = np.loadtxt(triplet_file)
+#    print(len(triplets))
+#
+#    train_triplets_file = "./train_triplets_list.txt"
+#    validation_triplets_file = "./validation_triplets_list.txt"
+#    test_triplets_file = "./test_triplets_list.txt"
+#
+#    if os.path.exists(train_triplets_file) and os.path.exists(validation_triplets_file) and os.path.exists(test_triplets_file):
+#        triplets_train = np.loadtxt(train_triplets_file)
+#        triplets_validation = np.loadtxt(validation_triplets_file)
+#        triplets_test = np.loadtxt(test_triplets_file)
+#        
+#    else:
+#        # Construct train, validation and test samples such that there are no repetitions of images
+#        train_images = list(range(0, 3800))
+#
+#        triplets_train = [ t for t in triplets if (t[0] in train_images     and t[1] in train_images     and t[2] in train_images)     ]
+#        triplets_vt    = [ t for t in triplets if (t[0] not in train_images and t[1] not in train_images and t[2] not in train_images) ]
+#
+#        triplets_validation, triplets_test = train_test_split(triplets_vt, train_size=0.5)
+#
+#        np.savetxt(train_triplets_file, triplets_train)
+#        np.savetxt(validation_triplets_file, triplets_validation)
+#        np.savetxt(test_triplets_file, triplets_test)
+#
+#    print("Train dataset size:      %d" %(len(triplets_train)))
+#    print("Validation dataset size: %d" %(len(triplets_validation)))
+#    print("Test dataset size:       %d" %(len(triplets_test)))
+#
+#
+#    return triplets_train, triplets_validation, triplets_test
 
 def make_train_validation_test_triplets_list(triplet_file):
 
